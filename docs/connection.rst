@@ -3,7 +3,7 @@
 Connection configuration
 ========================
 
-ClickHouse SQLAlchemy uses the following syntax for the connection string:
+ClickHouse SQLAlchemy uses the following syntax for the connection URL:
 
     .. code-block::
 
@@ -47,26 +47,49 @@ HTTP
 - **verify** controls certificate verification in ``https`` protocol.
   Possible choices: ``true``/``false``. Default is ``true``.
 
-Simple DSN example:
+Simple URL example using SQLAlchemy 2.0 style:
 
-    .. code-block:: RST
+    .. code-block:: python
 
-         clickhouse+http://host/db
+        from sqlalchemy import create_engine
+        from sqlalchemy.engine import URL
 
-DSN example for ClickHouse https port:
+        url = URL.create(
+            drivername="clickhouse+http",
+            host="localhost",
+            database="db"
+        )
+        engine = create_engine(url)
 
-    .. code-block:: RST
+URL example for ClickHouse https port:
 
-         clickhouse+http://user:password@host:8443/db?protocol=https
+    .. code-block:: python
 
-When you are using `nginx` as proxy server for ClickHouse server connection
-string might look like:
+        url = URL.create(
+            drivername="clickhouse+http",
+            username="user",
+            password="password",
+            host="host",
+            port=8443,
+            database="db",
+            query={"protocol": "https"}
+        )
+        engine = create_engine(url)
 
-    .. code-block:: RST
+When you are using `nginx` as proxy server for ClickHouse server, the URL creation might look like:
 
-         clickhouse+http://user:password@host:8124/test?protocol=https
+    .. code-block:: python
 
-Where ``8124`` is proxy port.
+        url = URL.create(
+            drivername="clickhouse+http",
+            username="user",
+            password="password",
+            host="host",
+            port=8124,
+            database="test",
+            query={"protocol": "https"}
+        )
+        engine = create_engine(url)
 
 If you need control over the underlying HTTP connection, pass a `requests.Session
 <https://requests.readthedocs.io/en/master/user/advanced/#session-objects>`_ instance
@@ -75,10 +98,16 @@ to ``create_engine()``, like so:
     .. code-block:: python
 
         from sqlalchemy import create_engine
+        from sqlalchemy.engine import URL
         from requests import Session
 
+        url = URL.create(
+            drivername="clickhouse+http",
+            host="localhost",
+            database="test"
+        )
         engine = create_engine(
-            'clickhouse+http://localhost/test',
+            url,
             connect_args={'http_session': Session()}
         )
 
@@ -90,31 +119,56 @@ Please note that native connection **is not encrypted**. All data including
 user/password is transferred in plain text. You should use this connection over
 SSH or VPN (for example) while communicating over untrusted network.
 
-Simple DSN example:
+Simple URL example using SQLAlchemy 2.0 style:
 
-    .. code-block:: RST
+    .. code-block:: python
 
-        clickhouse+native://host/db
+        from sqlalchemy import create_engine
+        from sqlalchemy.engine import URL
+
+        url = URL.create(
+            drivername="clickhouse+native",
+            host="localhost",
+            database="db"
+        )
+        engine = create_engine(url)
 
 All connection string parameters are proxied to ``clickhouse-driver``.
 See it's `parameters <https://clickhouse-driver.readthedocs.io/en/latest/api.html#clickhouse_driver.connection.Connection>`__.
 
-Example DSN with LZ4 compression secured with Let's Encrypt certificate on server side:
+Example with LZ4 compression secured with Let's Encrypt certificate on server side:
 
     .. code-block:: python
 
         import certify
+        from sqlalchemy import create_engine
+        from sqlalchemy.engine import URL
 
-        dsn = (
-            'clickhouse+native://user:pass@host/db?compression=lz4&'
-            'secure=True&ca_certs={}'.format(certify.where())
+        url = URL.create(
+            drivername="clickhouse+native",
+            username="user",
+            password="pass",
+            host="host",
+            database="db",
+            query={
+                "compression": "lz4",
+                "secure": "True",
+                "ca_certs": certify.where()
+            }
         )
+        engine = create_engine(url)
 
-Example with multiple hosts
+Example with multiple hosts:
 
-    .. code-block:: RST
+    .. code-block:: python
 
-        clickhouse+native://wronghost/default?alt_hosts=localhost:9000
+        url = URL.create(
+            drivername="clickhouse+native",
+            host="wronghost",
+            database="default",
+            query={"alt_hosts": "localhost:9000"}
+        )
+        engine = create_engine(url)
 
 
 Asynch
@@ -122,11 +176,19 @@ Asynch
 
 Same as Native.
 
-Simple DSN example:
+Simple URL example using SQLAlchemy 2.0 style:
 
-    .. code-block:: RST
+    .. code-block:: python
 
-        clickhouse+asynch://host/db
+        from sqlalchemy import create_engine
+        from sqlalchemy.engine import URL
+
+        url = URL.create(
+            drivername="clickhouse+asynch",
+            host="localhost",
+            database="db"
+        )
+        engine = create_engine(url)
 
 All connection string parameters are proxied to ``asynch``.
 See it's `parameters <https://github.com/long2ice/asynch/blob/dev/asynch/connection.py>`__.

@@ -12,31 +12,47 @@ Both declarative and constructor-style tables supported:
 
     .. code-block:: python
 
-        from sqlalchemy import create_engine, Column, MetaData, literal
+        from typing import Optional
+        from sqlalchemy import create_engine, Column, MetaData, literal, select, func
+        from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, Session
+        from sqlalchemy.engine import URL
+        from datetime import datetime, date
 
         from clickhouse_sqlalchemy import (
             Table, make_session, get_declarative_base, types, engines
         )
 
-        uri = 'clickhouse://default:@localhost/test'
+        # Create the connection URL
+        url = URL.create(
+            drivername="clickhouse",
+            username="default",
+            host="localhost",
+            database="test"
+        )
 
-        engine = create_engine(uri)
-        session = make_session(engine)
-        metadata = MetaData(bind=engine)
+        # Create engine and metadata
+        engine = create_engine(url)
+        metadata = MetaData()
 
+        # Create base class for declarative models
         Base = get_declarative_base(metadata=metadata)
 
+        # Declarative model definition
         class Rate(Base):
-            day = Column(types.Date, primary_key=True)
-            value = Column(types.Int32, comment='Rate value')
-            other_value = Column(types.DateTime)
+            __tablename__ = "rate"
+
+            day: Mapped[date] = mapped_column(types.Date, primary_key=True)
+            value: Mapped[int] = mapped_column(types.Int32, comment='Rate value')
+            other_value: Mapped[datetime] = mapped_column(types.DateTime)
 
             __table_args__ = (
                 engines.Memory(),
                 {'comment': 'Store rates'}
             )
 
-        another_table = Table('another_rate', metadata,
+        # Constructor-style table definition
+        another_table = Table(
+            'another_rate', metadata,
             Column('day', types.Date, primary_key=True),
             Column('value', types.Int32, server_default=literal(1)),
             engines.Memory()
@@ -54,8 +70,23 @@ Many of the ClickHouse functions can be called using the SQLAlchemy ``func``
 proxy. A few of aggregate functions require special handling though. There
 following functions are supported:
 
-* ``func.quantile(0.5, column1)`` becomes ``quantile(0.5)(column1)``
-* ``func.quantileIf(0.5, column1, column2 > 10)`` becomes ``quantileIf(0.5)(column1, column2 > 10)``
+    .. code-block:: python
+
+        # Example of using quantile functions with SQLAlchemy 2.0 style
+        with Session(engine) as session:
+            # Simple quantile
+            stmt = (
+                select(func.quantile(0.5).column1)
+                .select_from(some_table)
+            )
+            result = session.scalar(stmt)
+
+            # Conditional quantile
+            stmt = (
+                select(func.quantileIf(0.5).column1.filter(column2 > 10))
+                .select_from(some_table)
+            )
+            result = session.scalar(stmt)
 
 
 Dialect-specific options
@@ -66,9 +97,11 @@ You can specify particular codec for column:
     .. code-block:: python
 
         class Rate(Base):
-            day = Column(types.Date, primary_key=True)
-            value = Column(types.Int32)
-            other_value = Column(
+            __tablename__ = "rate"
+
+            day: Mapped[date] = mapped_column(types.Date, primary_key=True)
+            value: Mapped[int] = mapped_column(types.Int32)
+            other_value: Mapped[datetime] = mapped_column(
                 types.DateTime,
                 clickhouse_codec=('DoubleDelta', 'ZSTD')
             )
@@ -92,9 +125,11 @@ You can specify particular codec for column:
     .. code-block:: python
 
         class Rate(Base):
-            day = Column(types.Date, primary_key=True)
-            value = Column(types.Int32)
-            other_value = Column(
+            __tablename__ = "rate"
+
+            day: Mapped[date] = mapped_column(types.Date, primary_key=True)
+            value: Mapped[int] = mapped_column(types.Int32)
+            other_value: Mapped[datetime] = mapped_column(
                 types.DateTime, server_default=func.now()
             )
 
@@ -115,9 +150,11 @@ You can specify particular codec for column:
     .. code-block:: python
 
         class Rate(Base):
-            day = Column(types.Date, primary_key=True)
-            value = Column(types.Int32)
-            other_value = Column(
+            __tablename__ = "rate"
+
+            day: Mapped[date] = mapped_column(types.Date, primary_key=True)
+            value: Mapped[int] = mapped_column(types.Int32)
+            other_value: Mapped[datetime] = mapped_column(
                 types.DateTime, clickhouse_materialized=func.now()
             )
 
@@ -137,9 +174,11 @@ You can specify particular codec for column:
     .. code-block:: python
 
         class Rate(Base):
-            day = Column(types.Date, primary_key=True)
-            value = Column(types.Int32)
-            other_value = Column(
+            __tablename__ = "rate"
+
+            day: Mapped[date] = mapped_column(types.Date, primary_key=True)
+            value: Mapped[int] = mapped_column(types.Int32)
+            other_value: Mapped[datetime] = mapped_column(
                 types.DateTime, clickhouse_alias=func.now()
             )
 
@@ -160,9 +199,11 @@ You can also specify another column as default, materialized and alias
     .. code-block:: python
 
         class Rate(Base):
-            day = Column(types.Date, primary_key=True)
-            value = Column(types.Int32)
-            other_value = Column(types.Int32, server_default=value)
+            __tablename__ = "rate"
+
+            day: Mapped[date] = mapped_column(types.Date, primary_key=True)
+            value: Mapped[int] = mapped_column(types.Int32)
+            other_value: Mapped[int] = mapped_column(types.Int32, server_default=value)
 
             __table_args__ = (
                 engines.Memory(),
@@ -185,20 +226,23 @@ declarative ``__table_args__``:
 
     .. code-block:: python
 
-        from sqlalchemy import create_engine, MetaData, Column
+        from sqlalchemy import create_engine, MetaData, Column, text, func
+        from sqlalchemy.orm import Mapped, mapped_column
         from clickhouse_sqlalchemy import (
             get_declarative_base, types, engines
         )
 
         engine = create_engine('clickhouse://localhost')
-        metadata = MetaData(bind=engine)
+        metadata = MetaData()
         Base = get_declarative_base(metadata=metadata)
 
         class Statistics(Base):
-            date = Column(types.Date, primary_key=True)
-            sign = Column(types.Int8)
-            grouping = Column(types.Int32)
-            metric1 = Column(types.Int32)
+            __tablename__ = "statistics"
+
+            date: Mapped[date] = mapped_column(types.Date, primary_key=True)
+            sign: Mapped[int] = mapped_column(types.Int8)
+            grouping: Mapped[int] = mapped_column(types.Int32)
+            metric1: Mapped[int] = mapped_column(types.Int32)
 
             __table_args__ = (
                 engines.CollapsingMergeTree(
@@ -218,7 +262,7 @@ Or in table:
         )
 
         engine = create_engine('clickhouse+native://localhost/default')
-        metadata = MetaData(bind=engine)
+        metadata = MetaData()
 
         statistics = Table(
             'statistics', metadata,

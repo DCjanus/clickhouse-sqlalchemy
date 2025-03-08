@@ -17,56 +17,70 @@ Let's define some table, insert data into it and query inserted data.
 
     .. code-block:: python
 
-        from sqlalchemy import create_engine, Column, MetaData
+        from typing import Optional
+        from datetime import date, timedelta
+        from sqlalchemy import create_engine, Column, MetaData, select, func
+        from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, Session
+        from sqlalchemy.engine import URL
 
         from clickhouse_sqlalchemy import (
             Table, make_session, get_declarative_base, types, engines
         )
 
-        uri = 'clickhouse+native://localhost/default'
+        # Create the connection URL
+        url = URL.create(
+            drivername="clickhouse+native",
+            host="localhost",
+            database="default"
+        )
 
-        engine = create_engine(uri)
-        session = make_session(engine)
-        metadata = MetaData(bind=engine)
+        # Create engine and metadata
+        engine = create_engine(url)
+        metadata = MetaData()
 
+        # Create base class for declarative models
         Base = get_declarative_base(metadata=metadata)
 
+        # Define the model with type annotations
         class Rate(Base):
-            day = Column(types.Date, primary_key=True)
-            value = Column(types.Int32)
+            __tablename__ = "rate"
+
+            day: Mapped[date] = mapped_column(types.Date, primary_key=True)
+            value: Mapped[int] = mapped_column(types.Int32)
 
             __table_args__ = (
                 engines.Memory(),
             )
 
-        # Emits CREATE TABLE statement
-        Rate.__table__.create()
+        # Create the table
+        metadata.create_all(engine)
 
 
-Now it's time to insert some data
+Now it's time to insert some data and query it using SQLAlchemy 2.0 style:
 
     .. code-block:: python
 
-        from datetime import date, timedelta
-
-        from sqlalchemy import func
-
+        # Create data to insert
         today = date.today()
         rates = [
-            {'day': today - timedelta(i), 'value': 200 - i}
+            {"day": today - timedelta(i), "value": 200 - i}
             for i in range(100)
         ]
 
+        # Using a session with context manager
+        with Session(engine) as session:
+            # Insert data
+            session.execute(Rate.__table__.insert(), rates)
+            session.commit()
 
-Let's query inserted data
-
-    .. code-block:: python
-
-        session.execute(Rate.__table__.insert(), rates)
-
-        session.query(func.count(Rate.day)) \
-            .filter(Rate.day > today - timedelta(20)) \
-            .scalar()
+            # Query data using 2.0 style
+            stmt = (
+                select(func.count())
+                .select_from(Rate)
+                .where(Rate.day > today - timedelta(20))
+            )
+            count = session.scalar(stmt)
+            print(f"Found {count} records")
 
 Now you are ready to :ref:`configure your connection<connection>` and see more
 ClickHouse :ref:`features<features>` support.
